@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebSocket Client</title>
+</head>
+<body>
+<h1>Отправка измерений</h1>
+<button id="startButton">Старт</button>
+<button id="sendButton">Отправить данные</button>
+<button id="closeButton">Закрыть соединение</button>
+<button id="reconnectButton" disabled>Восстановить соединение</button>
+
+<div id="messages"></div>
+
+<div id="locationDisplay"></div> <!-- Элемент для отображения местоположения -->
+
+<script src="app.js"></script>
+
+<script>
+    const serverAddress = 'ws://192.168.31.87:8080';
+    let socket; // Объявляем переменную socket
+
+    function createWebSocket() {
+        socket = new WebSocket(serverAddress);
+
+        socket.addEventListener('open', (event) => {
+            console.log('Соединение установлено');
+            document.getElementById('messages').innerHTML += '<p>Соединение установлено</p>';
+            document.getElementById('reconnectButton').disabled = true; // Отключаем кнопку восстановления
+        });
+
+        socket.addEventListener('message', (event) => {
+            console.log('Получено сообщение:', event.data);
+            document.getElementById('messages').innerHTML += '<p>Получено: ' + event.data + '</p>';
+        });
+
+        socket.addEventListener('close', (event) => {
+            console.log('Соединение закрыто');
+            document.getElementById('messages').innerHTML += '<p>Соединение закрыто</p>';
+            document.getElementById('reconnectButton').disabled = false; // Включаем кнопку восстановления
+        });
+
+        socket.addEventListener('error', (error) => {
+            console.error('Ошибка:', error);
+            document.getElementById('messages').innerHTML += '<p>Ошибка: ' + error.message + '</p>';
+        });
+    }
+
+    createWebSocket(); // Создаем первое соединение
+
+    document.getElementById('sendButton').addEventListener('click', () => {
+        const message = 'Привет, сервер!';
+        console.log('Отправка сообщения:', message);
+        if (socket && socket.readyState === WebSocket.OPEN) {
+            socket.send(message);
+        } else {
+            console.log('Соединение не установлено');
+            document.getElementById('messages').innerHTML += '<p>Соединение не установлено</p>';
+        }
+    });
+
+    document.getElementById('closeButton').addEventListener('click', () => {
+        if (socket) {
+            socket.close();
+        }
+    });
+
+    document.getElementById('reconnectButton').addEventListener('click', () => {
+        if (socket) {
+            socket.close(); // Закрываем старое соединение
+        }
+        createWebSocket(); // Восстанавливаем соединение
+    });
+
+    const startButton = document.getElementById('startButton');
+
+    startButton.addEventListener('click', () => {
+    console.log("Кнопка 'Старт' нажата.");
+    if (navigator.geolocation) {
+        console.log("Запрос геолокации...");
+        navigator.geolocation.watchPosition(sendGPSData, handleError);
+    } else {
+        alert("Геолокация не поддерживается вашим браузером.");
+    }
+});
+
+function handleError(error) {
+    console.error('Ошибка геолокации:', error);
+    alert('Ошибка геолокации: ' + error.message); // Показываем сообщение об ошибке пользователю
+}
+
+
+
+    async function sendGPSData(position) {
+        const lat = position.coords.latitude;
+        const lon = position.coords.longitude;
+        const altitude = position.coords.altitude || 0; // Если доступно
+
+        console.log(`Получены данные GPS: Широта: ${lat}, Долгота: ${lon}, Высота: ${altitude}`);
+
+        // Обновляем элемент для отображения местоположения
+        document.getElementById('locationDisplay').innerHTML =
+            `<p>Широта: ${lat}, Долгота: ${lon}, Высота: ${altitude}</p>`;
+
+        const rtcmData = convertToRTCM3(lat, lon, altitude);
+
+        try {
+            const response = await sendToServer(rtcmData);
+            console.log('Данные отправлены:', response);
+        } catch (error) {
+            console.error('Ошибка при отправке данных:', error);
+        }
+    }
+
+    function convertToRTCM3(lat, lon, altitude) {
+        // Здесь необходимо реализовать логику преобразования в RTCM-3
+        return `RTCM3:${lat},${lon},${altitude}`; // Используйте обратные кавычки для шаблонных строк
+    }
+
+    async function sendToServer(data) {
+        const socket = new WebSocket('ws://192.168.31.87:8080'); // Укажите ваш сервер и порт
+
+        return new Promise((resolve, reject) => {
+            socket.onopen = () => {
+                console.log("Соединение с сервером установлено.");
+                socket.send(data);
+                resolve('Данные отправлены');
+                socket.close();
+            };
+
+            socket.onerror = (error) => {
+                reject('Ошибка WebSocket: ' + error);
+            };
+        });
+    }
+
+    function handleError(error) {
+        console.error('Ошибка геолокации:', error);
+    }
+</script>
+</body>
+</html>
+
